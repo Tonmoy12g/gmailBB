@@ -217,6 +217,17 @@ def init_db():
         )
         """)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_withdrawals_user_id ON withdrawals(user_id)")
+        # Backward-compatible fields for USDT accounting.
+        for col_name, col_type in [
+            ("usdt_amount", "REAL"),
+            ("usdt_fee", "REAL"),
+            ("usdt_rate", "REAL"),
+            ("currency", "TEXT"),
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE withdrawals ADD COLUMN {col_name} {col_type}")
+            except sqlite3.OperationalError:
+                pass
 
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS sub_admins (
@@ -245,6 +256,9 @@ def init_db():
             "min_withdraw_usdt": "0.25",
             "max_withdraw_usdt": "100.0",
             "usdt_fee": "0.05",
+            "usdt_rate_bdt": "120.0",
+            "usdt_charge_enabled": "ON",
+            "usdt_charge_usdt": "0.05",
             "admin_id": "8001997389",
             "support_handle": "https://t.me/TrustVaultMailsOwners",
             "official_channel_link": "https://t.me/TrustVaultMailsOfficial",
@@ -371,7 +385,7 @@ MESSAGES = {
         "operation_cancelled": "❌ কাজটি বাতিল করা হয়েছে।",
         "returning_main_menu": "🔙 মূল মেনুতে ফিরে যাচ্ছেন...",
 
-        "wallet_text": "👛 **আপনার অ্যাকাউন্ট ওয়ালেট** 💎\n━━━━━━━━━━━━━━━━━━━━━━\n💰 **বর্তমান ব্যালেন্স:** ৳{balance:.2f}\n━━━━━━━━━━━━━━━━━━━━━━\n💸 **পেন্ডিং উইথড্র:** ৳{pending_wd:.2f}\n💰 **মোট আয় (Lifetime):** ৳{lifetime:.2f}\n👥 **রেফারেল আয়:** ৳{ref_earnings:.2f}\n━━━━━━━━━━━━━━━━━━━━━━\n✅ **সম্পন্ন কাজ:** {completed} টি\n⏳ **রিভিউতে আছে:** {pending} টি\n⌛ **হোল্ডে আছে:** {held} টি\n❌ **রিজেক্টেড:** {rejected} টি",
+        "wallet_text": "👛 **আপনার অ্যাকাউন্ট ওয়ালেট** 💎\n━━━━━━━━━━━━━━━━━━━━━━\n💰 **বর্তমান ব্যালেন্স:** ৳{balance:.2f}\n💵 **USDT সমমূল্য:** ${usdt_balance:.4f} (রেট: ৳{usdt_rate:.2f}/USDT)\n━━━━━━━━━━━━━━━━━━━━━━\n💸 **পেন্ডিং উইথড্র:** ৳{pending_wd:.2f}\n💰 **মোট আয় (Lifetime):** ৳{lifetime:.2f}\n👥 **রেফারেল আয়:** ৳{ref_earnings:.2f}\n━━━━━━━━━━━━━━━━━━━━━━\n✅ **সম্পন্ন কাজ:** {completed} টি\n⏳ **রিভিউতে আছে:** {pending} টি\n⌛ **হোল্ডে আছে:** {held} টি\n❌ **রিজেক্টেড:** {rejected} টি",
         "wd_gateway_prompt": "💸 **উইথড্রয়াল পেমেন্ট গেটওয়ে নির্বাচন করুন:**\n━━━━━━━━━━━━━━━━━━━━━━\nপছন্দের মেথড নির্বাচন করুন:",
         "wd_invalid_method": "❌ সঠিক উইথড্রয়াল মেথড নির্বাচন করুন।",
         "wd_enter_account_usdt": "📱 **আপনার USDT (BEP-20) ওয়ালেট অ্যাড্রেস লিখুন:**",
@@ -414,7 +428,7 @@ MESSAGES = {
         "admin_price_mgr_title": "🏷️ **টাস্ক প্রাইস ম্যানেজার (Task Price Management)**\n━━━━━━━━━━━━━━━━━━━━━━\n📸 IG 2FA: <code>৳{ig_2fa}</code>\n📸 IG Seed: <code>৳{ig_seed}</code>\n📘 FB 2FA: <code>৳{fb_2fa}</code>\n📘 FB Cookies: <code>৳{fb_cookies}</code>\n✉️ Gmail: <code>৳{gmail}</code>\n👥 Ref Bonus: <code>{ref_bonus}%</code>\n━━━━━━━━━━━━━━━━━━━━━━\nনতুন দাম নির্ধারণ করতে নিচের বাটনে চাপ দিন:",
         "admin_no_pending_wds": "✅ কোনো পেন্ডিং উইথড্র রিকোয়েস্ট নেই।",
         "admin_pending_wds_title": "💸 **পেন্ডিং উইথড্র রিকোয়েস্ট:**\n\n",
-        "admin_sys_settings_title": "⚙️ **সিস্টেম সেটিংস (ON/OFF Toggles & Controls)**\n━━━━━━━━━━━━━━━━━━━━━━\n🔒 Force Join Status: {force_join}\n🛠️ Maintenance Mode: {maint}\n📸 IG 2FA: {ig_2fa} | IG Seed: {ig_seed}\n📘 FB 2FA: {fb_2fa} | FB Cookies: {fb_cookies}\n✉️ Gmail: {gmail}\n🟢 Bkash WD: {bkash_wd} (Min: {min_bkash} | Max: {max_bkash})\n🟠 Nagad WD: {nagad_wd} (Min: {min_nagad} | Max: {max_nagad})\n🔵 USDT WD: {usdt_wd} (Min: {min_usdt} | Max: {max_usdt})\n━━━━━━━━━━━━━━━━━━━━━━\nটগল বা পরিবর্তন করতে নিচের বাটন ব্যবহার করুন।",
+        "admin_sys_settings_title": "⚙️ **সিস্টেম সেটিংস (ON/OFF Toggles & Controls)**\n━━━━━━━━━━━━━━━━━━━━━━\n🔒 Force Join Status: {force_join}\n🛠️ Maintenance Mode: {maint}\n📸 IG 2FA: {ig_2fa} | IG Seed: {ig_seed}\n📘 FB 2FA: {fb_2fa} | FB Cookies: {fb_cookies}\n✉️ Gmail: {gmail}\n🟢 Bkash WD: {bkash_wd} (Min: {min_bkash} | Max: {max_bkash})\n🟠 Nagad WD: {nagad_wd} (Min: {min_nagad} | Max: {max_nagad})\n🔵 USDT WD: {usdt_wd} (Min: {min_usdt} | Max: {max_usdt})\n💱 USDT Rate: ৳{usdt_rate}/USDT\n💳 USDT Charge: {charge_status} ({charge_usdt} USDT)\n━━━━━━━━━━━━━━━━━━━━━━\nটগল বা পরিবর্তন করতে নিচের বাটন ব্যবহার করুন।",
         "admin_live_stats_title": "📊 **লাইভ স্ট্যাটাস** ⚡\n━━━━━━━━━━━━━━━━━━━━━━\n👥 মোট ইউজার: {total_users}\n⏳ পেন্ডিং টাস্ক: {pending_tasks}\n⌛ হোল্ড টাস্ক: {held_tasks}\n✅ এপ্রুভড টাস্ক: {approved_tasks}\n❌ রিজেক্টেড টাস্ক: {rejected_tasks}\n💸 পেন্ডিং উইথড্র: {pending_wd}\n💰 মোট ইউজার ব্যালেন্স: ৳{total_balance:.2f}",
         "admin_broadcast_prompt_msg": "𝚁𝙱𝙺 𝙰𝙿𝙿 𝚂𝚃𝙾𝚁𝙴: 📢 Broadcast Message পাঠান (All Media Supported)\n━━━━━━━━━━━━━━━━━━━━━━\nএখানে পছন্দমতো যেকোনো **Text, Photo 🖼️, Video 🎥, Document 📄, Voice 🎤, Audio 🎵** সেন্ড করুন। ক্যাপশন থাকলে ক্যাপশনসহ ইউজারদের কাছে অরিজিনাল মেসেজ হিসেবে যাবে।",
         "admin_search_no_results": "❌ কোনো টাস্ক পাওয়া যায়নি।",
@@ -508,7 +522,7 @@ MESSAGES = {
         "operation_cancelled": "❌ Operation cancelled.",
         "returning_main_menu": "🔙 Returning to Main Menu...",
 
-        "wallet_text": "💵 **Your Balance**\n━━━━━━━━━━━━━━━━━━━━━━\n💰 **Current Balance:** ৳{balance:.2f}\n━━━━━━━━━━━━━━━━━━━━━━\n💸 **Pending Withdrawal:** ৳{pending_wd:.2f}\n💰 **Lifetime Earnings:** ৳{lifetime:.2f}\n👥 **Referral Earnings:** ৳{ref_earnings:.2f}\n━━━━━━━━━━━━━━━━━━━━━━\n✅ **Completed Tasks:** {completed}\n⏳ **Under Review:** {pending}\n⌛ **On Hold:** {held}\n❌ **Rejected:** {rejected}",
+        "wallet_text": "💵 **Your Balance**\n━━━━━━━━━━━━━━━━━━━━━━\n💰 **Current Balance:** ৳{balance:.2f}\n💵 **USDT Equivalent:** ${usdt_balance:.4f} (Rate: ৳{usdt_rate:.2f}/USDT)\n━━━━━━━━━━━━━━━━━━━━━━\n💸 **Pending Withdrawal:** ৳{pending_wd:.2f}\n💰 **Lifetime Earnings:** ৳{lifetime:.2f}\n👥 **Referral Earnings:** ৳{ref_earnings:.2f}\n━━━━━━━━━━━━━━━━━━━━━━\n✅ **Completed Tasks:** {completed}\n⏳ **Under Review:** {pending}\n⌛ **On Hold:** {held}\n❌ **Rejected:** {rejected}",
         "wd_gateway_prompt": "💸 **Select Withdrawal Payment Gateway:**\n\nChoose payment method:",
         "wd_invalid_method": "❌ Please select a valid withdrawal method.",
         "wd_enter_account_usdt": "📱 **Enter your USDT (BEP-20) wallet address:**",
@@ -551,7 +565,7 @@ MESSAGES = {
         "admin_price_mgr_title": "🏷️ **Task Price Manager**\n\n📸 IG 2FA: <code>৳{ig_2fa}</code>\n📸 IG Seed: <code>৳{ig_seed}</code>\n📘 FB 2FA: <code>৳{fb_2fa}</code>\n📘 FB Cookies: <code>৳{fb_cookies}</code>\n✉️ Gmail: <code>৳{gmail}</code>\n👥 Ref Bonus: <code>{ref_bonus}%</code>\n\nUse buttons below to set new prices:",
         "admin_no_pending_wds": "✅ No pending withdrawal requests.",
         "admin_pending_wds_title": "💸 **Pending Withdrawal Requests:**\n\n",
-        "admin_sys_settings_title": "⚙️ **System Settings (ON/OFF Toggles)**\n\n🔒 Force Join: {force_join}\n🛠️ Maintenance: {maint}\n📸 IG 2FA: {ig_2fa} | IG Seed: {ig_seed}\n📘 FB 2FA: {fb_2fa} | FB Cookies: {fb_cookies}\n✉️ Gmail: {gmail}\n🟢 Bkash WD: {bkash_wd} (Min: {min_bkash} | Max: {max_bkash})\n🟠 Nagad WD: {nagad_wd} (Min: {min_nagad} | Max: {max_nagad})\n🔵 USDT WD: {usdt_wd} (Min: {min_usdt} | Max: {max_usdt})\n\nUse buttons below to toggle or edit settings.",
+        "admin_sys_settings_title": "⚙️ **System Settings (ON/OFF Toggles)**\n\n🔒 Force Join: {force_join}\n🛠️ Maintenance: {maint}\n📸 IG 2FA: {ig_2fa} | IG Seed: {ig_seed}\n📘 FB 2FA: {fb_2fa} | FB Cookies: {fb_cookies}\n✉️ Gmail: {gmail}\n🟢 Bkash WD: {bkash_wd} (Min: {min_bkash} | Max: {max_bkash})\n🟠 Nagad WD: {nagad_wd} (Min: {min_nagad} | Max: {max_nagad})\n🔵 USDT WD: {usdt_wd} (Min: {min_usdt} | Max: {max_usdt})\n💱 USDT Rate: ৳{usdt_rate}/USDT\n💳 USDT Charge: {charge_status} ({charge_usdt} USDT)\n\nUse buttons below to toggle or edit settings.",
         "admin_live_stats_title": "📊 **Live Stats**\n\n👥 Total Users: {total_users}\n⏳ Pending Tasks: {pending_tasks}\n⌛ Hold Tasks: {held_tasks}\n✅ Approved Tasks: {approved_tasks}\n❌ Rejected Tasks: {rejected_tasks}\n💸 Pending Withdrawals: {pending_wd}\n💰 Total User Balance: ৳{total_balance:.2f}",
         "admin_broadcast_prompt_msg": "𝚁𝙱𝙺 𝙰𝙿𝙿 𝚂𝚃𝙾𝚁𝙴: 📢 Broadcast Message পাঠান (All Media Supported)\n━━━━━━━━━━━━━━━━━━━━━━\nSend any **Text, Photo 🖼️, Video 🎥, Document 📄, Voice 🎤, Audio 🎵**. Caption will be preserved.",
         "admin_search_no_results": "❌ No tasks found.",
@@ -1834,10 +1848,14 @@ async def handle_wallet_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         rejected_tasks = cursor.fetchone()[0]
 
     lifetime_earnings = approved_earnings + user_data["ref_earnings"]
+    usdt_rate = max(float(get_setting_val("usdt_rate_bdt", "120.0")), 0.000001)
+    usdt_balance = float(user_data["balance"]) / usdt_rate
 
     wallet_text = tr(
         user_id, "wallet_text",
         balance=user_data['balance'],
+        usdt_balance=usdt_balance,
+        usdt_rate=usdt_rate,
         pending_wd=pending_withdraw,
         lifetime=lifetime_earnings,
         ref_earnings=user_data['ref_earnings'],
@@ -1945,9 +1963,31 @@ async def handle_withdraw_number(update: Update, context: ContextTypes.DEFAULT_T
     min_limit = float(get_setting_val(f"min_withdraw_{method}", "50.0"))
     max_limit = float(get_setting_val(f"max_withdraw_{method}", "5000.0"))
 
-    msg = tr(user_id, "wd_enter_amount", balance=user_data['balance'], min_limit=min_limit, max_limit=max_limit)
+    if method in ("usdt", "binance_uid"):
+        usdt_rate = max(float(get_setting_val("usdt_rate_bdt", "120.0")), 0.000001)
+        usdt_balance = float(user_data["balance"]) / usdt_rate
+        charge_status = get_setting_val("usdt_charge_enabled", "ON") == "ON"
+        charge_usdt = float(get_setting_val("usdt_charge_usdt", "0.05")) if charge_status else 0.0
+        msg = (
+            "💵 **USDT withdrawal amount লিখুন:**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 Available: **${usdt_balance:.4f} USDT**\n"
+            f"💱 Rate: **৳{usdt_rate:.2f} = 1 USDT**\n"
+            f"🔻 Minimum: **{min_limit} USDT**\n"
+            f"🔺 Maximum: **{max_limit} USDT**\n"
+            f"💳 Charge: **{charge_usdt:.4f} USDT**" if charge_status else
+            "💵 **USDT withdrawal amount লিখুন:**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 Available: **${usdt_balance:.4f} USDT**\n"
+            f"💱 Rate: **৳{usdt_rate:.2f} = 1 USDT**\n"
+            f"🔻 Minimum: **{min_limit} USDT**\n"
+            f"🔺 Maximum: **{max_limit} USDT**\n"
+            "💳 Charge: **OFF**"
+        )
+    else:
+        msg = tr(user_id, "wd_enter_amount", balance=user_data['balance'], min_limit=min_limit, max_limit=max_limit)
 
-    await update.message.reply_text(msg, reply_markup=get_cancel_keyboard(user_id))
+    await update.message.reply_text(msg, reply_markup=get_cancel_keyboard(user_id), parse_mode=ParseMode.MARKDOWN)
     return STATE_WD_AMOUNT
 
 async def handle_withdraw_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1978,34 +2018,57 @@ async def handle_withdraw_amount(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text(tr(user_id, "wd_max_limit_err", max_limit=max_limit), reply_markup=get_cancel_keyboard(user_id))
         return STATE_WD_AMOUNT
 
-    if amount > user_data["balance"]:
-        await update.message.reply_text(tr(user_id, "wd_insufficient_bal"), reply_markup=get_cancel_keyboard(user_id))
-        return STATE_WD_AMOUNT
-
     number = context.user_data.get("wd_number")
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    fee = 0.0
+    fee_usdt = 0.0
+    usdt_rate = 0.0
+    usdt_amount = None
+    debit_amount_bdt = amount
+
     if method in ("usdt", "binance_uid"):
-        fee = float(get_setting_val("usdt_fee", "0.05"))
-        if (amount - fee) <= 0:
-            await update.message.reply_text(tr(user_id, "wd_usdt_fee_err"), reply_markup=get_cancel_keyboard(user_id))
+        usdt_rate = max(float(get_setting_val("usdt_rate_bdt", "120.0")), 0.000001)
+        usdt_amount = amount
+        charge_enabled = get_setting_val("usdt_charge_enabled", "ON") == "ON"
+        fee_usdt = float(get_setting_val("usdt_charge_usdt", "0.05")) if charge_enabled else 0.0
+        debit_amount_bdt = (usdt_amount + fee_usdt) * usdt_rate
+        if debit_amount_bdt > float(user_data["balance"]):
+            await update.message.reply_text(
+                f"❌ ব্যালেন্স যথেষ্ট নয়। প্রয়োজন: ৳{debit_amount_bdt:.2f} (প্রায় ${debit_amount_bdt/usdt_rate:.4f} USDT)",
+                reply_markup=get_cancel_keyboard(user_id)
+            )
             return STATE_WD_AMOUNT
+    elif amount > user_data["balance"]:
+        await update.message.reply_text(tr(user_id, "wd_insufficient_bal"), reply_markup=get_cancel_keyboard(user_id))
+        return STATE_WD_AMOUNT
 
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (amount, user_id))
+        cursor.execute("UPDATE users SET balance = balance - ? WHERE user_id = ?", (debit_amount_bdt, user_id))
         cursor.execute(
-            "INSERT INTO withdrawals (user_id, method, number, amount, status, created_at) VALUES (?, ?, ?, ?, 'Pending', ?)",
-            (user_id, method, number, amount, now)
+            """INSERT INTO withdrawals
+               (user_id, method, number, amount, status, created_at, usdt_amount, usdt_fee, usdt_rate, currency)
+               VALUES (?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?)""",
+            (
+                user_id, method, number, debit_amount_bdt, now,
+                usdt_amount, fee_usdt, usdt_rate,
+                "USDT" if method in ("usdt", "binance_uid") else "BDT"
+            )
         )
         wd_id = cursor.lastrowid
         conn.commit()
 
-    fee_text = f" (Fee: ৳{fee:.2f})" if method in ("usdt", "binance_uid") else ""
+    if method in ("usdt", "binance_uid"):
+        fee_text = f" (Charge: ${fee_usdt:.4f} USDT)" if fee_usdt > 0 else " (Charge: OFF)"
+        shown_amount = usdt_amount
+        shown_currency = "$"
+    else:
+        fee_text = ""
+        shown_amount = amount
+        shown_currency = "৳"
 
     await update.message.reply_text(
-        tr(user_id, "wd_success_msg", wd_id=wd_id, amount=amount, fee_text=fee_text, method=("USDT (BEP20)" if method == "usdt" else "Binance UID" if method == "binance_uid" else method.upper()), number=number),
+        tr(user_id, "wd_success_msg", wd_id=wd_id, amount=shown_amount, fee_text=fee_text, method=("USDT (BEP20)" if method == "usdt" else "Binance UID" if method == "binance_uid" else method.upper()), number=number).replace("৳", shown_currency),
         reply_markup=get_main_keyboard(user_id),
         parse_mode=ParseMode.MARKDOWN
     )
@@ -2017,8 +2080,8 @@ async def handle_withdraw_amount(update: Update, context: ContextTypes.DEFAULT_T
         f"💸 **নতুন উইথড্র রিকোয়েস্ট! / New Withdraw Request!**\n\n"
         f"🆔 **উইথড্র আইডি:** #{wd_id}\n"
         f"👤 **ইউজার আইডি:** <code>{user_id}</code>\n"
-        f"💵 **পরিমাণ:** ৳{amount:.2f}\n"
-        f"📱 **গেটওয়ে:** {method.upper()} - <code>{number}</code>"
+        f"💵 **পরিমাণ:** " + (f"${usdt_amount:.4f} USDT (Debit: ৳{debit_amount_bdt:.2f})" if method in ("usdt", "binance_uid") else f"৳{amount:.2f}") + "\n"
+        f"📱 **গেটওয়ে:** {("USDT (BEP20)" if method == "usdt" else "Binance UID" if method == "binance_uid" else method.upper())} - <code>{number}</code>"
     )
     buttons = [
         [
@@ -2847,6 +2910,9 @@ async def admin_system_settings(update: Update, context: ContextTypes.DEFAULT_TY
     max_nagad = get_setting_val("max_withdraw_nagad", "5000.0")
     min_usdt = get_setting_val("min_withdraw_usdt", "0.25")
     max_usdt = get_setting_val("max_withdraw_usdt", "100.0")
+    usdt_rate = get_setting_val("usdt_rate_bdt", "120.0")
+    charge_status = get_setting_val("usdt_charge_enabled", "ON")
+    charge_usdt = get_setting_val("usdt_charge_usdt", "0.05")
 
     msg = tr(
         user_id, "admin_sys_settings_title",
@@ -2855,7 +2921,8 @@ async def admin_system_settings(update: Update, context: ContextTypes.DEFAULT_TY
         bkash_wd=bkash_wd, nagad_wd=nagad_wd, usdt_wd=usdt_wd,
         min_bkash=min_bkash, max_bkash=max_bkash,
         min_nagad=min_nagad, max_nagad=max_nagad,
-        min_usdt=min_usdt, max_usdt=max_usdt
+        min_usdt=min_usdt, max_usdt=max_usdt, usdt_rate=usdt_rate,
+        charge_status=charge_status, charge_usdt=charge_usdt
     )
     keyboard = [
         [InlineKeyboardButton(f"Force Join: {force_join}", callback_data="adm_toggle_force_join_enabled"),
@@ -2867,6 +2934,9 @@ async def admin_system_settings(update: Update, context: ContextTypes.DEFAULT_TY
          InlineKeyboardButton("✏️ Nagad Min/Max", callback_data="adm_edit_nagad_limits")],
         [InlineKeyboardButton(f"🔵 USDT: {usdt_wd}", callback_data="adm_toggle_wd_usdt_active"),
          InlineKeyboardButton("✏️ USDT Min/Max", callback_data="adm_edit_usdt_limits")],
+        [InlineKeyboardButton("💱 Edit USDT Rate", callback_data="adm_edit_usdt_rate_bdt"),
+         InlineKeyboardButton(f"💳 Charge: {charge_status}", callback_data="adm_toggle_usdt_charge_enabled")],
+        [InlineKeyboardButton("✏️ Edit Charge (USDT)", callback_data="adm_edit_usdt_charge_usdt")],
         [InlineKeyboardButton(f"📸 IG 2FA: {ig_2fa}", callback_data="adm_toggle_ig_2fa_active"),
          InlineKeyboardButton(f"📸 IG Seed: {ig_seed}", callback_data="adm_toggle_ig_seed_active")],
         [InlineKeyboardButton(f"📘 FB 2FA: {fb_2fa}", callback_data="adm_toggle_fb_2fa_active"),
@@ -3181,9 +3251,12 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             cursor.execute("UPDATE withdrawals SET status = 'Approved' WHERE id = ?", (wd_id,))
             conn.commit()
         try:
+            approved_amount = wd["usdt_amount"] if wd["method"] in ("usdt", "binance_uid") and wd["usdt_amount"] is not None else wd["amount"]
+            approved_text = f"${approved_amount:.4f} USDT" if wd["method"] in ("usdt", "binance_uid") else f"৳{approved_amount:.2f}"
+            approval_msg = tr(wd["user_id"], "user_wd_approved", wd_id=wd_id, amount=approved_amount, number=wd["number"]).replace(f"৳{approved_amount:.2f}", approved_text)
             await context.bot.send_message(
                 chat_id=wd["user_id"],
-                text=tr(wd["user_id"], "user_wd_approved", wd_id=wd_id, amount=wd['amount'], number=wd['number']),
+                text=approval_msg,
                 parse_mode=ParseMode.HTML
             )
         except Exception as e:
@@ -3206,9 +3279,12 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             cursor.execute("UPDATE withdrawals SET status = 'Rejected' WHERE id = ?", (wd_id,))
             conn.commit()
         try:
+            rejected_amount = wd["usdt_amount"] if wd["method"] in ("usdt", "binance_uid") and wd["usdt_amount"] is not None else wd["amount"]
+            rejected_text = f"${rejected_amount:.4f} USDT" if wd["method"] in ("usdt", "binance_uid") else f"৳{rejected_amount:.2f}"
+            rejection_msg = tr(wd["user_id"], "user_wd_rejected", wd_id=wd_id, amount=rejected_amount).replace(f"৳{rejected_amount:.2f}", rejected_text)
             await context.bot.send_message(
                 chat_id=wd["user_id"],
-                text=tr(wd["user_id"], "user_wd_rejected", wd_id=wd_id, amount=wd['amount']),
+                text=rejection_msg,
                 parse_mode=ParseMode.HTML
             )
         except Exception as e:
