@@ -1960,8 +1960,9 @@ async def handle_withdraw_number(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data["wd_number"] = number
     user_data = get_user_data(user_id)
 
-    min_limit = float(get_setting_val(f"min_withdraw_{method}", "50.0"))
-    max_limit = float(get_setting_val(f"max_withdraw_{method}", "5000.0"))
+    limit_method = "usdt" if method in ("usdt", "binance_uid") else method
+    min_limit = float(get_setting_val(f"min_withdraw_{limit_method}", "50.0"))
+    max_limit = float(get_setting_val(f"max_withdraw_{limit_method}", "5000.0"))
 
     if method in ("usdt", "binance_uid"):
         usdt_rate = max(float(get_setting_val("usdt_rate_bdt", "120.0")), 0.000001)
@@ -2007,8 +2008,9 @@ async def handle_withdraw_amount(update: Update, context: ContextTypes.DEFAULT_T
     user_data = get_user_data(user_id)
     method = context.user_data.get("wd_method")
 
-    min_limit = float(get_setting_val(f"min_withdraw_{method}", "50.0"))
-    max_limit = float(get_setting_val(f"max_withdraw_{method}", "5000.0"))
+    limit_method = "usdt" if method in ("usdt", "binance_uid") else method
+    min_limit = float(get_setting_val(f"min_withdraw_{limit_method}", "50.0"))
+    max_limit = float(get_setting_val(f"max_withdraw_{limit_method}", "5000.0"))
 
     if amount < min_limit:
         await update.message.reply_text(tr(user_id, "wd_min_limit_err", min_limit=min_limit), reply_markup=get_cancel_keyboard(user_id))
@@ -3881,6 +3883,7 @@ def main():
     btn_bkash_re = r"^(🟢 বিকাশ \(Bkash\)|🟢 Bkash)$"
     btn_nagad_re = r"^(🟠 নগদ \(Nagad\)|🟠 Nagad)$"
     btn_usdt_re = r"^(🔵 USDT \(BEP-20\))$"
+    btn_binance_uid_re = r"^(🟡 Binance UID)$"
 
     btn_adm_pending_re = r"^(🟢 📩 পেন্ডিং টাস্ক|📩 পেন্ডিং টাস্ক|🟢 📩 Pending Tasks|📩 Pending Tasks)$"
     btn_adm_held_re = r"^(🟢 ⌛ হোল্ড টাস্ক|⌛ হোল্ড টাস্ক|🟢 ⌛ Held Tasks|⌛ Held Tasks)$"
@@ -4018,6 +4021,7 @@ def main():
                 MessageHandler(filters.Regex(btn_bkash_re), handle_withdraw_method),
                 MessageHandler(filters.Regex(btn_nagad_re), handle_withdraw_method),
                 MessageHandler(filters.Regex(btn_usdt_re), handle_withdraw_method),
+                MessageHandler(filters.Regex(btn_binance_uid_re), handle_withdraw_method),
                 MessageHandler(filters.Regex(btn_main_menu_re), start_command),
                 MessageHandler(filters.Regex(btn_cancel_re), cancel_operation),
             ],
