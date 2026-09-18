@@ -311,6 +311,8 @@ MESSAGES = {
         "btn_bkash": "🟢 বিকাশ (Bkash)",
         "btn_nagad": "🟠 নগদ (Nagad)",
         "btn_usdt": "🔵 USDT (BEP-20)",
+        "btn_binance_uid": "🟡 Binance UID",
+        "btn_binance_uid": "🟡 Binance UID",
         "btn_pending_tasks": "🟢 📩 পেন্ডিং টাস্ক",
         "btn_held_tasks": "🟢 ⌛ হোল্ড টাস্ক",
         "btn_task_search": "🟢 🔍 টাস্ক সার্চ",
@@ -373,6 +375,7 @@ MESSAGES = {
         "wd_gateway_prompt": "💸 **উইথড্রয়াল পেমেন্ট গেটওয়ে নির্বাচন করুন:**\n━━━━━━━━━━━━━━━━━━━━━━\nপছন্দের মেথড নির্বাচন করুন:",
         "wd_invalid_method": "❌ সঠিক উইথড্রয়াল মেথড নির্বাচন করুন।",
         "wd_enter_account_usdt": "📱 **আপনার USDT (BEP-20) ওয়ালেট অ্যাড্রেস লিখুন:**",
+        "wd_enter_account_binance_uid": "🆔 **আপনার Binance UID লিখুন:**",
         "wd_enter_account_mfs": "📱 **আপনার {method} অ্যাকাউন্ট নম্বর লিখুন (১১-১৪ ডিজিট):**",
         "wd_invalid_account": "❌ ভুল অ্যাকাউন্ট নম্বর! সঠিক ১১-১৪ ডিজিটের নম্বর দিন।",
         "wd_enter_amount": "💵 **উইথড্র করার পরিমাণ লিখুন:**\n━━━━━━━━━━━━━━━━━━━━━━\n💰 আপনার বর্তমান ব্যালেন্স: ৳{balance:.2f}\n🔻 সর্বনিম্ন সীমা: ৳{min_limit}\n🔺 সর্বোচ্চ সীমা: ৳{max_limit}",
@@ -509,6 +512,7 @@ MESSAGES = {
         "wd_gateway_prompt": "💸 **Select Withdrawal Payment Gateway:**\n\nChoose payment method:",
         "wd_invalid_method": "❌ Please select a valid withdrawal method.",
         "wd_enter_account_usdt": "📱 **Enter your USDT (BEP-20) wallet address:**",
+        "wd_enter_account_binance_uid": "🆔 **Enter your Binance UID:**",
         "wd_enter_account_mfs": "📱 **Enter your {method} account number (11-14 digits):**",
         "wd_invalid_account": "❌ Invalid account number! Enter a valid 11-14 digit number.",
         "wd_enter_amount": "💵 **Enter withdrawal amount:**\n\n💰 Current Balance: ৳{balance:.2f}\n🔻 Minimum Limit: ৳{min_limit}\n🔺 Maximum Limit: ৳{max_limit}",
@@ -1047,7 +1051,10 @@ def get_withdraw_keyboard(user_id: int = None, lang: str = None) -> ReplyKeyboar
         keyboard.append(mfs_row)
 
     if usdt_active:
-        keyboard.append([KeyboardButton(tr(l, "btn_usdt"))])
+        keyboard.append([
+            KeyboardButton(tr(l, "btn_usdt")),
+            KeyboardButton(tr(l, "btn_binance_uid"))
+        ])
 
     keyboard.append([KeyboardButton(tr(l, "btn_main_menu"))])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -1890,6 +1897,9 @@ async def handle_withdraw_method(update: Update, context: ContextTypes.DEFAULT_T
     elif text in ["🔵 USDT (BEP-20)"]:
         if get_setting_val("wd_usdt_active", "ON") == "ON":
             method = "usdt"
+    elif text in ["🟡 Binance UID"]:
+        if get_setting_val("wd_usdt_active", "ON") == "ON":
+            method = "binance_uid"
 
     if not method:
         await update.message.reply_text(tr(user_id, "wd_invalid_method"), reply_markup=get_withdraw_keyboard(user_id))
@@ -1899,6 +1909,8 @@ async def handle_withdraw_method(update: Update, context: ContextTypes.DEFAULT_T
 
     if method == "usdt":
         msg = tr(user_id, "wd_enter_account_usdt")
+    elif method == "binance_uid":
+        msg = tr(user_id, "wd_enter_account_binance_uid")
     else:
         msg = tr(user_id, "wd_enter_account_mfs", method=method.upper())
 
@@ -1915,7 +1927,15 @@ async def handle_withdraw_number(update: Update, context: ContextTypes.DEFAULT_T
 
     method = context.user_data.get("wd_method")
 
-    if method != "usdt" and not re.match(r"^[0-9]{11,14}$", number):
+    if method == "binance_uid":
+        if not re.fullmatch(r"[0-9]{5,20}", number):
+            await update.message.reply_text("❌ সঠিক Binance UID দিন (শুধু ৫-২০ ডিজিট)।", reply_markup=get_cancel_keyboard(user_id))
+            return STATE_WD_NUMBER
+    elif method == "usdt":
+        if not re.fullmatch(r"0x[a-fA-F0-9]{40}", number):
+            await update.message.reply_text("❌ সঠিক USDT BEP-20 wallet address দিন (0x দিয়ে শুরু, মোট 42 অক্ষর)।", reply_markup=get_cancel_keyboard(user_id))
+            return STATE_WD_NUMBER
+    elif not re.match(r"^[0-9]{11,14}$", number):
         await update.message.reply_text(tr(user_id, "wd_invalid_account"), reply_markup=get_cancel_keyboard(user_id))
         return STATE_WD_NUMBER
 
@@ -1966,7 +1986,7 @@ async def handle_withdraw_amount(update: Update, context: ContextTypes.DEFAULT_T
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     fee = 0.0
-    if method == "usdt":
+    if method in ("usdt", "binance_uid"):
         fee = float(get_setting_val("usdt_fee", "0.05"))
         if (amount - fee) <= 0:
             await update.message.reply_text(tr(user_id, "wd_usdt_fee_err"), reply_markup=get_cancel_keyboard(user_id))
@@ -1982,10 +2002,10 @@ async def handle_withdraw_amount(update: Update, context: ContextTypes.DEFAULT_T
         wd_id = cursor.lastrowid
         conn.commit()
 
-    fee_text = f" (Fee: ৳{fee:.2f})" if method == "usdt" else ""
+    fee_text = f" (Fee: ৳{fee:.2f})" if method in ("usdt", "binance_uid") else ""
 
     await update.message.reply_text(
-        tr(user_id, "wd_success_msg", wd_id=wd_id, amount=amount, fee_text=fee_text, method=method.upper(), number=number),
+        tr(user_id, "wd_success_msg", wd_id=wd_id, amount=amount, fee_text=fee_text, method=("USDT (BEP20)" if method == "usdt" else "Binance UID" if method == "binance_uid" else method.upper()), number=number),
         reply_markup=get_main_keyboard(user_id),
         parse_mode=ParseMode.MARKDOWN
     )
