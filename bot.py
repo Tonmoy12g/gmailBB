@@ -2771,6 +2771,7 @@ async def admin_user_management(update: Update, context: ContextTypes.DEFAULT_TY
     buttons = [
         [InlineKeyboardButton("🟢 Ban User", callback_data="adm_usr_ban"), InlineKeyboardButton("🟢 Unban User", callback_data="adm_usr_unban")],
         [InlineKeyboardButton("🟢 Add Balance", callback_data="adm_usr_add_bal"), InlineKeyboardButton("🟢 Deduct Balance", callback_data="adm_usr_sub_bal")],
+        [InlineKeyboardButton("🔴 Reset All Balances", callback_data="adm_usr_reset_balances")],
         [InlineKeyboardButton("🟢 Banned List", callback_data="adm_usr_banned_list"), InlineKeyboardButton("🟢 Search User Profile", callback_data="adm_usr_search")],
         [InlineKeyboardButton("🟢 Admin Menu", callback_data="adm_back_to_admin")]
     ]
@@ -3074,6 +3075,31 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         return STATE_ADMIN_REM_SUBADMIN
 
     # User Management Callbacks
+    if data == "adm_usr_reset_balances":
+        buttons = [
+            [InlineKeyboardButton("✅ হ্যাঁ, সবার ব্যালেন্স ০ করুন", callback_data="adm_usr_reset_balances_confirm")],
+            [InlineKeyboardButton("❌ বাতিল", callback_data="adm_back_to_admin")]
+        ]
+        await query.edit_message_text(
+            "⚠️ <b>সতর্কতা!</b>\n\nআপনি কি সত্যিই সব ইউজারের বর্তমান ব্যালেন্স ০ করতে চান?\n\nএই কাজটি পূর্বাবস্থায় ফিরিয়ে আনা যাবে না। আগে ব্যাকআপ নিন।",
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    if data == "adm_usr_reset_balances_confirm":
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET balance = 0.0")
+            conn.commit()
+        await query.edit_message_text(
+            "✅ <b>সফলভাবে সব ইউজারের ব্যালেন্স ০ করা হয়েছে।</b>",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🟢 Admin Menu", callback_data="adm_back_to_admin")]]),
+            parse_mode=ParseMode.HTML
+        )
+        logger.warning("ADMIN %s reset all user balances to zero", user_id)
+        return
+
     if data == "adm_usr_ban":
         await query.edit_message_text("🚫 **ব্যান করার জন্য ইউজারের টেলিগ্রাম আইডি পাঠান:**")
         return STATE_ADMIN_BAN_USER
