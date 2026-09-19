@@ -2454,7 +2454,7 @@ async def process_bulk_reject(update: Update, context: ContextTypes.DEFAULT_TYPE
     matched_count = 0
     unmatched_list = []
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    reason = "Bulk rejection process by admin"
+    reason = "আপনার Gmail অ্যাকাউন্ট লগইন করা সম্ভব হয়নি। তাই অ্যাকাউন্টটি রিজেক্ট করা হয়েছে।"
 
     for item in cleaned_items:
         with get_db() as conn:
@@ -3151,8 +3151,17 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM task_submissions WHERE submission_id = ?", (sub_id,))
             sub = cursor.fetchone()
-            if not sub or sub["status"] == "Approved":
-                await query.edit_message_text("❌ Task already approved or processed!")
+            if not sub or sub["status"] not in ("Pending", "Hold"):
+                # The task may have been processed through bulk approve/reject.
+                # Do not show an unnecessary "already processed" popup.
+                try:
+                    await query.answer()
+                except Exception:
+                    pass
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
                 return
 
             cursor.execute("UPDATE users SET balance = balance + ? WHERE user_id = ?", (sub["reward_amount"], sub["user_id"]))
@@ -3237,7 +3246,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         if reason_key == "default":
-            reason = "Account issue detected during review"
+            reason = "আপনার Gmail অ্যাকাউন্ট লগইন করা সম্ভব হয়নি। তাই অ্যাকাউন্টটি রিজেক্ট করা হয়েছে।"
         elif reason_key == "wrongpass":
             reason = "Wrong password or username mismatch"
         else:
@@ -3245,9 +3254,24 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
         with get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute("UPDATE task_submissions SET status = 'Rejected', reject_reason = ?, updated_at = ? WHERE submission_id = ?", (reason, now, sub_id))
             cursor.execute("SELECT * FROM task_submissions WHERE submission_id = ?", (sub_id,))
             sub = cursor.fetchone()
+
+            if not sub or sub["status"] not in ("Pending", "Hold"):
+                try:
+                    await query.answer()
+                except Exception:
+                    pass
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception:
+                    pass
+                return
+
+            cursor.execute(
+                "UPDATE task_submissions SET status = 'Rejected', reject_reason = ?, updated_at = ? WHERE submission_id = ?",
+                (reason, now, sub_id)
+            )
             conn.commit()
 
         if sub:
